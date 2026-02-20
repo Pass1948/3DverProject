@@ -76,3 +76,10 @@ crashlytics-build.properties
 
 # End of https://www.toptal.com/developers/gitignore/api/unity
 /Assets/Imports
+/Assets/TextMesh Pro
+/Assets/Resources
+/Assets/Plugins
+/Assets/Configs
+/Packages
+/ProjectSettings
+*.meta
