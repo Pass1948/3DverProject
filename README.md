@@ -1,13 +1,13 @@
 ## 🎮 프로젝트 소개
 **『작심삼일(作心三日)』프로젝트**는 3일동안 게임하고 3일동안 기능 개발하는 프로젝트입니다
-해당 프로젝트는 Unity 엔진을 기반으로 진행하며 Github에는 코드이외의 것은 ignore되어 업로드 되지 않습니다
+-해당 프로젝트는 Unity 엔진을 기반으로 진행하며 Github에는 코드이외의 것은 ignore되어 업로드 되지 않습니다
 
 ## 🧰 개발 환경
-Engine: Unity 6000.3.6f1 (LTS)
-Language: C#
-IDE: Visual Studio 2022
-Target: Windows (PC) (선택적으로 Android/iOS 확장 가능)
-Version Control: Git + GitHub
+- **Engine**: Unity 6000.3.6f1 (LTS)
+- **Language**: C#
+- **IDE**: Visual Studio 2022
+- **Target**: Windows (PC) (선택적으로 Android/iOS 확장 가능)
+- **Version** Control: Git + GitHub
 
 
 ## 🎀 프로젝트 콘텐츠 설명
