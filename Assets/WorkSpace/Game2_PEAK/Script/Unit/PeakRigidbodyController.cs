@@ -242,6 +242,9 @@ public class PeakRigidbodyController : MonoBehaviour
         if (references.itemHoldPoint == null)
             references.itemHoldPoint = references.cameraPivot != null ? references.cameraPivot : transform;
 
+        if (references.itemHoldPoint == null)
+            references.itemHoldPoint = references.cameraPivot != null ? references.cameraPivot : transform;
+
         yaw = transform.eulerAngles.y;
 
         float rawPitch = references.cameraPivot != null ? references.cameraPivot.localEulerAngles.x : 0f;
@@ -269,6 +272,9 @@ public class PeakRigidbodyController : MonoBehaviour
     private void FixedUpdate()
     {
         float dt = Time.fixedDeltaTime;
+
+        staminaRuntime.BeginStep();
+        TickTimers(dt);
 
         staminaRuntime.BeginStep();
         TickTimers(dt);
@@ -1124,9 +1130,22 @@ public class PeakRigidbodyController : MonoBehaviour
         jumpPressedThisStep = true;
         jumpBufferTimer = jumpAssist.jumpBufferTime;
     }
-    public void OnGrab(InputValue value)
+
+    // [수정] 아이템 집기 기능 : 한번 클릭으로 집고 손에 든 상태는 버튼을 떼도 유지됨
+    public void OnInteract(InputValue value)
     {
-        grabHeld = value.isPressed;
+        if (!value.isPressed)
+            return;
+
+        interactPressedThisStep = true;
+    }
+
+    public void OnDrop(InputValue value)
+    {
+        if (!value.isPressed)
+            return;
+
+        DropHeldItem();
     }
 
     // [수정] 아이템 집기 기능 : 한번 클릭으로 집고 손에 든 상태는 버튼을 떼도 유지됨
