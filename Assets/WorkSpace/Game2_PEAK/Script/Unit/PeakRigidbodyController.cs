@@ -1130,22 +1130,9 @@ public class PeakRigidbodyController : MonoBehaviour
         jumpPressedThisStep = true;
         jumpBufferTimer = jumpAssist.jumpBufferTime;
     }
-
-    // [수정] 아이템 집기 기능 : 한번 클릭으로 집고 손에 든 상태는 버튼을 떼도 유지됨
-    public void OnInteract(InputValue value)
+    public void OnGrab(InputValue value)
     {
-        if (!value.isPressed)
-            return;
-
-        interactPressedThisStep = true;
-    }
-
-    public void OnDrop(InputValue value)
-    {
-        if (!value.isPressed)
-            return;
-
-        DropHeldItem();
+        grabHeld = value.isPressed;
     }
 
     // [수정] 아이템 집기 기능 : 한번 클릭으로 집고 손에 든 상태는 버튼을 떼도 유지됨
