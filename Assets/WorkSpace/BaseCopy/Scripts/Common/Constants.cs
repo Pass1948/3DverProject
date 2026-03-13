@@ -9,7 +9,8 @@ public enum EventType
     // --- PEAK ---
     StaminaChanged,
     ClimbCheck,
-
+    InteractText,
+    InfoButtonText,
 
 }
 
@@ -41,5 +42,6 @@ public enum LocomotionState
 {
     Grounded,
     Airborne,
-    Climbing
+    Climbing,
+    Mantling,
 }
