@@ -1,11 +1,14 @@
 using UnityEngine;
 using UnityEngine.UI;
+using static Unity.Entities.EntitiesJournaling;
 
 public class PointerUI : WindowUI
 {
     [SerializeField] Sprite normalPointer;
     [SerializeField] Sprite climbCheckPointer;
     [SerializeField] Sprite climingPointer;
+    [SerializeField] GameObject interactText;
+    [SerializeField] GameObject dropButtonText;
 
     Image uiImage;
 
@@ -18,11 +21,15 @@ public class PointerUI : WindowUI
     private void OnEnable()
     {
         GameManager.Event.Subscribe<bool, LocomotionState, float>(EventType.ClimbCheck, ChangePointer);
+        GameManager.Event.Subscribe<PeakCarryable>(EventType.InteractText, CheckItem);
+        GameManager.Event.Subscribe<bool>(EventType.InfoButtonText, InfoButtonText);
     }
 
     private void OnDisable()
     {
         GameManager.Event.Unsubscribe<bool, LocomotionState, float>(EventType.ClimbCheck, ChangePointer);
+        GameManager.Event.Unsubscribe<PeakCarryable>(EventType.InteractText, CheckItem);
+        GameManager.Event.Unsubscribe<bool>(EventType.InfoButtonText, InfoButtonText);
     }
 
     private void ChangePointer(bool climb, LocomotionState state, float stamina)
@@ -41,6 +48,14 @@ public class PointerUI : WindowUI
         }
     }
 
+    private void CheckItem(PeakCarryable item)
+    {
+        interactText.SetActive(item != null);
+    }
 
+    private void InfoButtonText(bool isheld)
+    {
+        dropButtonText.SetActive(isheld);
+    }
 
 }
