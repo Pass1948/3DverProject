@@ -12,9 +12,9 @@ public class PeakStaminaRuntime
     public float Extra => extra;
     public float Total => current + extra;
 
-    public void Initialize(float maxStamina, float startExtraStamina)
+    public void Initialize(float effectiveMaxStamina, float startExtraStamina)
     {
-        current = Mathf.Max(0f, maxStamina);
+        current = Mathf.Max(0f, effectiveMaxStamina);
         extra = Mathf.Max(0f, startExtraStamina);
         recoverDelayTimer = 0f;
         consumedThisStep = false;
@@ -31,9 +31,10 @@ public class PeakStaminaRuntime
             recoverDelayTimer -= dt;
     }
 
-    public void Clamp(float maxStamina)
+    // [수정] 현재 유효 최대 스태미나를 넘어가면 즉시 잘라냄
+    public void ForceClampToEffectiveMax(float effectiveMaxStamina)
     {
-        current = Mathf.Clamp(current, 0f, maxStamina);
+        current = Mathf.Clamp(current, 0f, effectiveMaxStamina);
         extra = Mathf.Max(0f, extra);
     }
 
@@ -59,9 +60,10 @@ public class PeakStaminaRuntime
         return true;
     }
 
-    public void Recover(float dt, float maxStamina, float recoverPerSecond, float recoverDelay, bool recoveryBlocked)
+    // [수정] recover는 원래 최대치가 아니라 현재 패널티가 반영된 최대치까지만 진행
+    public void Recover(float dt, float effectiveMaxStamina, float recoverPerSecond, float recoverDelay, bool recoveryBlocked)
     {
-        Clamp(maxStamina);
+        ForceClampToEffectiveMax(effectiveMaxStamina);
 
         if (recoveryBlocked || consumedThisStep)
         {
@@ -72,7 +74,7 @@ public class PeakStaminaRuntime
         if (recoverDelayTimer > 0f)
             return;
 
-        if (current < maxStamina)
-            current = Mathf.MoveTowards(current, maxStamina, recoverPerSecond * dt);
+        if (current < effectiveMaxStamina)
+            current = Mathf.MoveTowards(current, effectiveMaxStamina, recoverPerSecond * dt);
     }
 }

@@ -242,9 +242,6 @@ public class PeakRigidbodyController : MonoBehaviour
         if (references.itemHoldPoint == null)
             references.itemHoldPoint = references.cameraPivot != null ? references.cameraPivot : transform;
 
-        if (references.itemHoldPoint == null)
-            references.itemHoldPoint = references.cameraPivot != null ? references.cameraPivot : transform;
-
         yaw = transform.eulerAngles.y;
 
         float rawPitch = references.cameraPivot != null ? references.cameraPivot.localEulerAngles.x : 0f;
@@ -275,10 +272,7 @@ public class PeakRigidbodyController : MonoBehaviour
 
         staminaRuntime.BeginStep();
         TickTimers(dt);
-
-        staminaRuntime.BeginStep();
-        TickTimers(dt);
-
+        ApplyEffectiveStaminaCap();
         ProbeGround();
         ProbeClimbSurface();
         ProbeInteractTarget();
@@ -288,6 +282,7 @@ public class PeakRigidbodyController : MonoBehaviour
         TickState();
         ProcessInteraction();
         RecoverStamina(dt);
+        ApplyEffectiveStaminaCap();
         NotifyRuntimeSignalsIfNeeded(false);
         ClearStepInputs();
     }
@@ -305,6 +300,11 @@ public class PeakRigidbodyController : MonoBehaviour
 
         staminaRuntime.TickTimers(dt);
     }
+    private void ApplyEffectiveStaminaCap()
+    {
+        staminaRuntime.ForceClampToEffectiveMax(CurrentMaxStamina);
+    }
+
 
     // --- 이동 및 회전 처리 ---
     private void UpdateLook()
@@ -1011,7 +1011,7 @@ public class PeakRigidbodyController : MonoBehaviour
         if (staminaDirty)
         {
             OnStaminaChanged?.Invoke(CurrentStamina, CurrentMaxStamina, CurrentExtraStamina);
-            GameManager.Event.Publish(EventType.StaminaChanged, CurrentStamina, CurrentMaxStamina);
+            GameManager.Event.Publish(EventType.StaminaChanged, CurrentStamina, staminaSettings.baseMaxStamina);
 
             lastPublishedStamina = CurrentStamina;
             lastPublishedMaxStamina = CurrentMaxStamina;
