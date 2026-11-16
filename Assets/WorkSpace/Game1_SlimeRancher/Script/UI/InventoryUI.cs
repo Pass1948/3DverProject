@@ -29,7 +29,7 @@ public class InventoryUI : WindowUI
     protected override void Awake()
     {
         base.Awake();
-        inventory = GameManager.Unit.Game1Player.inventory;
+        inventory = GameManager.Unit.Get<Game1Player>().inventory;
         roots = new[] { slot1, slot2, slot3, slot4 };
         texts = new[] { slot1Text, slot2Text, slot3Text, slot4Text };
         icons = new Image[4];
@@ -45,18 +45,19 @@ public class InventoryUI : WindowUI
         {
             RefreshAll();
         }
-        GameManager.Event.Subscribe<int>(EventType.SelectSlot, SelectUIAnime);
-        GameManager.Event.Subscribe<int, Slots, ItemDefSO>(EventType.SlotChanged, HandleSlotChanged);
+        GameManager.Event.Subscribe<SelectSlotEvent>(SelectUIAnime);
+        GameManager.Event.Subscribe<SlotChangedEvent>(HandleSlotChanged);
     }
     private void OnDisable()
     {
-        GameManager.Event.Unsubscribe<int>(EventType.SelectSlot, SelectUIAnime);
-        GameManager.Event.Unsubscribe<int, Slots, ItemDefSO>(EventType.SlotChanged, HandleSlotChanged);
+        GameManager.Event.Unsubscribe<SelectSlotEvent>(SelectUIAnime);
+        GameManager.Event.Unsubscribe<SlotChangedEvent>(HandleSlotChanged);
     }
 
     // =========  UI 애니메이션 ==========
-    private void SelectUIAnime(int i) 
+    private void SelectUIAnime(SelectSlotEvent e)
     {
+        int i = e.Index;
         switch (i)
         {
             case 0:
@@ -103,8 +104,11 @@ public class InventoryUI : WindowUI
             Apply(i, default, null);
     }
 
-    private void HandleSlotChanged(int index, Slots slot, ItemDefSO def)
+    private void HandleSlotChanged(SlotChangedEvent e)
     {
+        int index = e.Index;
+        Slots slot = e.Slot;
+        ItemDefSO def = e.Def;
         if ((uint)index >= 4u) return;
         Apply(index, slot, def);
     }

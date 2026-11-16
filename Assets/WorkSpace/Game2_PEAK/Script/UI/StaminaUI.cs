@@ -11,15 +11,17 @@ public class StaminaUI : WindowUI
 
     private void OnEnable()
     {
-        GameManager.Event.Subscribe<float, float>(EventType.StaminaChanged, StaminaUpdate);
+        GameManager.Event.Subscribe<StaminaChangedEvent>(StaminaUpdate);
     }
     private void OnDisable()
     {
-        GameManager.Event.Unsubscribe<float, float>(EventType.StaminaChanged, StaminaUpdate);
+        GameManager.Event.Unsubscribe<StaminaChangedEvent>(StaminaUpdate);
     }
 
-    private void StaminaUpdate(float currentStamina, float maxStamina)
+    private void StaminaUpdate(StaminaChangedEvent e)
     {
+        float currentStamina = e.Current;
+        float maxStamina = e.Max;
         float staminaPercent = currentStamina / maxStamina;
         staminaBar.fillAmount = staminaPercent;
     }

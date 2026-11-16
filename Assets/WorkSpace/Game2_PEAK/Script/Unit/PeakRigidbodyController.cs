@@ -300,14 +300,14 @@ public class PeakRigidbodyController : MonoBehaviour
 
         staminaRuntime.TickTimers(dt);
     }
-    private void ApplyEffectiveStaminaCap()
+    private void ApplyEffectiveStaminaCap() // 현재 패널티가 반영된 최대 스태미나를 넘어가지 않도록 강제로 잘라냄
     {
         staminaRuntime.ForceClampToEffectiveMax(CurrentMaxStamina);
     }
 
 
     // --- 이동 및 회전 처리 ---
-    private void UpdateLook()
+    private void UpdateLook()   // 마우스 입력으로 시점 회전 업데이트
     {
         yaw += lookInput.x * look.lookSensitivity;
         pitch -= lookInput.y * look.lookSensitivity;
@@ -317,13 +317,13 @@ public class PeakRigidbodyController : MonoBehaviour
             references.cameraPivot.localRotation = Quaternion.Euler(pitch, 0f, 0f);
     }
 
-    private void ApplyBodyRotation()
+    private void ApplyBodyRotation() // 이동과 상관없이 항상 몸체는 yaw 방향을 바라보도록 회전 적용
     {
         Quaternion targetRot = Quaternion.Euler(0f, yaw, 0f);
         rb.MoveRotation(targetRot);
     }
 
-    private void ProbeGround()
+    private void ProbeGround()  // 플레이어 아래에 지면이 있는지 감지하고, 지면과의 각도가 너무 가파르지 않은지 체크
     {
         groundHit = default;
         isGrounded = false;
@@ -343,7 +343,8 @@ public class PeakRigidbodyController : MonoBehaviour
         groundHit = hit;
     }
 
-    private void ProbeClimbSurface()
+    // 클라이밍 가능한 표면 감지 : 플레이어 시점과 몸체 정면 양쪽에서 구체 캐스트를 시도하여 더 가까운 쪽을 선택, 클라이밍 도중에는 감지 실패 시 짧은 유예 시간 허용
+    private void ProbeClimbSurface()    
     {
         hasClimbSurface = false;
         climbHit = default;
@@ -455,7 +456,7 @@ public class PeakRigidbodyController : MonoBehaviour
             return;
 
         currentInteractTarget = newTarget;
-        GameManager.Event.Publish(EventType.InteractText, currentInteractTarget);
+        GameManager.Event.Publish(new InteractTextEvent(currentInteractTarget));
     }
 
     // [수정] 실제 화면 중앙 조준점 기준 레이를 반환
@@ -468,7 +469,7 @@ public class PeakRigidbodyController : MonoBehaviour
         return new Ray(view.position, view.forward);
     }
 
-    private void UpdateCoyoteTimer()
+    private void UpdateCoyoteTimer() // 지면에 닿아있는 동안 코요태 타이머 리셋, 클라이밍과 맨틀링 도중에는 리셋하지 않음
     {
         if (isGrounded && state != LocomotionState.Climbing && state != LocomotionState.Mantling)
             coyoteTimer = jumpAssist.coyoteTime;
@@ -551,7 +552,7 @@ public class PeakRigidbodyController : MonoBehaviour
         }
     }
 
-    private void TickGrounded()
+    private void TickGrounded() // 지면에 붙어있는 동안의 이동 처리
     {
         rb.useGravity = true;
 
@@ -572,7 +573,7 @@ public class PeakRigidbodyController : MonoBehaviour
         Velocity = new Vector3(newPlanar.x, y, newPlanar.z);
     }
 
-    private void TickAirborne()
+    private void TickAirborne() // 공중에 떠있는 동안의 이동 처리
     {
         rb.useGravity = true;
 
@@ -631,7 +632,7 @@ public class PeakRigidbodyController : MonoBehaviour
         Velocity = moveVelocity + towardWallVelocity;
     }
 
-    // [수정] 날카로운 난간을 타고 올라가는 Mantle 실행 함수
+    // 날카로운 난간을 타고 올라가는 Mantle 실행 함수
     private void TickMantling()
     {
         rb.useGravity = false;
@@ -648,7 +649,7 @@ public class PeakRigidbodyController : MonoBehaviour
             FinishMantle();
     }
 
-    private Vector3 GetCameraRelativeMove()
+    private Vector3 GetCameraRelativeMove() // 이동 입력을 카메라의 정면과 오른쪽 방향으로 변환하여 반환
     {
         Transform basis = GetViewTransform();
 
@@ -673,7 +674,7 @@ public class PeakRigidbodyController : MonoBehaviour
         return desired;
     }
 
-    private float GetTargetGroundSpeed()
+    private float GetTargetGroundSpeed()    // 달리기 입력이 있고 이동 입력이 충분히 있으면 달리기 속도, 그렇지 않으면 걷기 속도를 반환
     {
         if (runHeld && moveInput.sqrMagnitude > 0.0001f)
         {
@@ -684,7 +685,7 @@ public class PeakRigidbodyController : MonoBehaviour
         return move.walkSpeed;
     }
 
-    private bool TryStartGroundJump()
+    private bool TryStartGroundJump()   // 점프 입력이 있고 점프 어시스트 타이머가 유효하면 점프 실행
     {
         if (jumpBufferTimer <= 0f)
             return false;
@@ -709,7 +710,11 @@ public class PeakRigidbodyController : MonoBehaviour
     }
 
     // --- 클라이밍 함수 ---
-    private bool CanEnterClimb()
+    // 클라이밍 진입 조건 : 잡기 입력이 있고, 재부착 쿨타임이 끝났으며,
+    // 스태미나가 충분하고, 클라이밍 가능한 표면이 감지되고,
+    // 플레이어 시점이 벽을 어느 정도 바라보고 있으며,
+    // (공중에 떠있는 경우 또는) 지면에 붙어있는 경우에는 이동 입력이 벽 쪽으로 어느 정도 있는 경우
+    private bool CanEnterClimb()    
     {
         if (!grabHeld)
             return false;
@@ -745,7 +750,7 @@ public class PeakRigidbodyController : MonoBehaviour
         return pushingToWall;
     }
 
-    private void EnterClimb()
+    private void EnterClimb()   // 클라이밍 상태로 전이하면서 중력 끄고, 벽에서 일정 거리 유지하도록 초기 속도 설정
     {
         state = LocomotionState.Climbing;
         climbSurfaceLostTimer = climb.climbSurfaceLostGrace;
@@ -754,7 +759,7 @@ public class PeakRigidbodyController : MonoBehaviour
         LogState("Climb");
     }
 
-    private void ExitClimb(bool keepCurrentHorizontal)
+    private void ExitClimb(bool keepCurrentHorizontal)  // 클라이밍 상태에서 벗어나면서 중력 켜고, 현재 속도를 유지하거나 벽에서 밀려나는 초기 속도로 설정
     {
         rb.useGravity = true;
         state = LocomotionState.Airborne;
@@ -782,7 +787,7 @@ public class PeakRigidbodyController : MonoBehaviour
         LogState("Fall");
     }
 
-    private void DoClimbLeap()
+    private void DoClimbLeap()  // 클라이밍 도약 실행 : 스태미나 충분한지 체크, 벽에서 도약하는 초기 속도 설정, 클라이밍 상태에서 벗어나면서 공중 상태로 전이
     {
         if (!TryConsumeStamina(staminaSettings.climbLeapCost))
         {
@@ -811,7 +816,7 @@ public class PeakRigidbodyController : MonoBehaviour
         LogState("ClimbLeap");
     }
 
-    // [수정] 날카로운 난간 상단으로 자연스럽게 올라가기 위한 진입 조건
+    // 날카로운 난간 상단으로 자연스럽게 올라가기 위한 진입 조건
     private bool TryStartMantle()
     {
         if (state != LocomotionState.Climbing)
@@ -836,7 +841,7 @@ public class PeakRigidbodyController : MonoBehaviour
         return true;
     }
 
-    // [수정] 상단 정상 바닥과 서 있을 공간이 있는지 검사
+    // 상단 정상 바닥과 서 있을 공간이 있는지 검사
     private bool TryFindMantleTarget(out Vector3 targetRootPosition)
     {
         targetRootPosition = default;
@@ -883,7 +888,7 @@ public class PeakRigidbodyController : MonoBehaviour
         return true;
     }
 
-    private void FinishMantle()
+    private void FinishMantle() // Mantle이 끝나고 정상 위에 서 있는 상태로 전이
     {
         rb.useGravity = true;
         state = LocomotionState.Grounded;
@@ -891,7 +896,7 @@ public class PeakRigidbodyController : MonoBehaviour
         LogState("Grounded");
     }
 
-    private Transform GetViewTransform()
+    private Transform GetViewTransform()// 시점 회전에 사용되는 트랜스폼 반환 (카메라 피벗 우선, 없으면 몸체)
     {
         if (references.playerCamera != null)
             return references.playerCamera.transform;
@@ -949,7 +954,7 @@ public class PeakRigidbodyController : MonoBehaviour
         OnHeldItemChanged?.Invoke(null);
     }
 
-    private void PreventWallStickWhileAirborne()
+    private void PreventWallStickWhileAirborne()    // 공중에서 벽에 붙는 현상을 방지하기 위한 함수, 클라이밍이나 맨틀링 중이거나 지면에 붙어있으면 적용하지 않음
     {
         if (state == LocomotionState.Climbing || state == LocomotionState.Mantling)
             return;
@@ -983,23 +988,24 @@ public class PeakRigidbodyController : MonoBehaviour
     }
 
     // --- 스태미나 처리 ---
-    private void RecoverStamina(float dt)
+    // 클라이밍과 맨틀링 도중에는 회복이 차단되고, 그 외에는 패널티가 반영된 최대 스태미나를 기준으로 회복
+    private void RecoverStamina(float dt)   
     {
         bool recoveryBlocked = state == LocomotionState.Climbing || state == LocomotionState.Mantling;
         staminaRuntime.Recover(dt, CurrentMaxStamina, staminaSettings.staminaRecoverPerSecond, staminaSettings.staminaRecoverDelay, recoveryBlocked);
     }
 
-    private bool TryConsumeStamina(float amount)
+    private bool TryConsumeStamina(float amount)    // 스태미나를 소비하려고 시도, 충분하면 소비하고 true 반환, 부족하면 소비하지 않고 false 반환
     {
         return staminaRuntime.Consume(amount);
     }
 
-    private float CurrentTotalStamina()
+    private float CurrentTotalStamina() // 현재 스태미나 총량 계산 (기본 최대 스태미나에서 패널티를 반영한 최대 스태미나로 강제 클램프된 값)
     {
         return staminaRuntime.Total;
     }
 
-    // [수정] 값이 바뀔 때만 이벤트 발행하도록 최적화
+    // 값이 바뀔 때만 이벤트 발행하도록 최적화
     private void NotifyRuntimeSignalsIfNeeded(bool force)
     {
         bool staminaDirty =
@@ -1011,7 +1017,7 @@ public class PeakRigidbodyController : MonoBehaviour
         if (staminaDirty)
         {
             OnStaminaChanged?.Invoke(CurrentStamina, CurrentMaxStamina, CurrentExtraStamina);
-            GameManager.Event.Publish(EventType.StaminaChanged, CurrentStamina, staminaSettings.baseMaxStamina);
+            GameManager.Event.Publish(new StaminaChangedEvent(CurrentStamina, staminaSettings.baseMaxStamina));
 
             lastPublishedStamina = CurrentStamina;
             lastPublishedMaxStamina = CurrentMaxStamina;
@@ -1027,7 +1033,7 @@ public class PeakRigidbodyController : MonoBehaviour
         if (climbDirty)
         {
             OnClimbContextChanged?.Invoke(hasClimbSurface, state, CurrentStamina);
-            GameManager.Event.Publish(EventType.ClimbCheck, hasClimbSurface, state, CurrentStamina);
+            GameManager.Event.Publish(new ClimbCheckEvent(hasClimbSurface, state, CurrentStamina));
 
             lastPublishedClimbSurface = hasClimbSurface;
             lastPublishedState = state;
@@ -1098,30 +1104,31 @@ public class PeakRigidbodyController : MonoBehaviour
         top = center + Vector3.up * halfBody;
     }
 
-    private bool HasStandingRoom(Vector3 candidateRootPosition)
+    private bool HasStandingRoom(Vector3 candidateRootPosition) // Mantle로 올라설 위치에 캡슐이 들어갈 공간이 있는지 검사
     {
         GetCapsulePoints(candidateRootPosition + Vector3.up * climb.mantleClearanceLift, 0.02f, out Vector3 bottom, out Vector3 top, out float radius);
         return !Physics.CheckCapsule(bottom, top, radius, GetObstacleMask(), QueryTriggerInteraction.Ignore);
     }
 
     // --- Input System Callbacks ---
+    // 이동 입력 업데이트, 벡터2로 받아서 moveInput에 저장 (x는 오른쪽, y는 앞쪽 입력)
     public void OnMove(InputValue value)
     {
         moveInput = value.Get<Vector2>();
     }
-
+    // 마우스 입력으로 시점 회전 업데이트, LookOff 액션에서 시점 고정/해제 토글 처리
     public void OnLook(InputValue value)
     {
         lookInput = value.Get<Vector2>();
     }
-
+    // 달리기 입력은 눌린 순간에 runPressedThisStep이 true가 되고, 누르고 있는 동안 runHeld가 true가 됨
     public void OnRun(InputValue value)
     {
         bool pressed = value.isPressed;
         runPressedThisStep = pressed && !runHeld;
         runHeld = pressed;
     }
-
+    // 점프 입력은 눌린 순간에만 점프 버퍼 타이머가 세팅되고, 클라이밍 도약에도 사용됨
     public void OnJump(InputValue value)
     {
         if (!value.isPressed)
@@ -1130,12 +1137,29 @@ public class PeakRigidbodyController : MonoBehaviour
         jumpPressedThisStep = true;
         jumpBufferTimer = jumpAssist.jumpBufferTime;
     }
+    // 잡기 입력은 누르고 있는 동안만 클라이밍 유지, 버튼을 떼면 클라이밍에서 벗어남
     public void OnGrab(InputValue value)
     {
         grabHeld = value.isPressed;
     }
 
-    // [수정] 아이템 집기 기능 : 한번 클릭으로 집고 손에 든 상태는 버튼을 떼도 유지됨
+    // 마우스 클릭으로 시점 고정/해제 토글, 고정 시 커서 숨김, 해제 시 커서 보이도록
+    public void OnLookOff(InputValue value)
+    {
+        bool pressed = value.isPressed;
+        if (pressed)
+        {
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
+        }
+        else
+        {
+            Cursor.lockState = CursorLockMode.Locked;
+            Cursor.visible = false;
+        }
+    }
+
+    // 아이템 집기 기능 : 한번 클릭으로 집고 손에 든 상태는 버튼을 떼도 유지됨
     public void OnInteract(InputValue value)
     {
         if (!value.isPressed)
@@ -1152,20 +1176,6 @@ public class PeakRigidbodyController : MonoBehaviour
         DropHeldItem();
     }
 
-    public void OnLookOff(InputValue value)
-    {
-        bool pressed = value.isPressed;
-        if (pressed)
-        {
-            Cursor.lockState = CursorLockMode.None;
-            Cursor.visible = true;
-        }
-        else
-        {
-            Cursor.lockState = CursorLockMode.Locked;
-            Cursor.visible = false;
-        }
-    }
 
     // 디버그용 지오메트리 그리기
     private void OnDrawGizmosSelected()

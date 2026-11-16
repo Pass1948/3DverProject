@@ -5,7 +5,7 @@ public class Game2Player : MonoBehaviour
     public PeakRigidbodyController controller;
     private void Awake()
     {
-        GameManager.Unit.Game2Player = this;
+        GameManager.Unit.Register(this);
         controller = GetComponent<PeakRigidbodyController>();
     }
 

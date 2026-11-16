@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System.Collections;
 using UnityEngine;
 
-public class ResourceManager : MonoBehaviour
+public class ResourceManager : ManagerBase
 {
     Dictionary<string, Object> resources = new Dictionary<string, Object>();
     public T Load<T>(string path) where T : Object

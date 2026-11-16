@@ -125,7 +125,7 @@ public class Game1Inventory : MonoBehaviour
     private void RaiseChanged(int i)
     {
         defById.TryGetValue(slots[i].id, out var def);
-        GameManager.Event.Publish(EventType.SlotChanged, i, slots[i], def);
+        GameManager.Event.Publish(new SlotChangedEvent(i, slots[i], def));
     }
 
     private void SyncAll()

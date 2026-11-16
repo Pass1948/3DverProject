@@ -40,7 +40,7 @@ public class PeakCarryable : MonoBehaviour
         if (disableCollisionWhileHeld)
             SetCollidersEnabled(false);
         isHeld = true;
-        GameManager.Event.Publish(EventType.InfoButtonText, isHeld);
+        GameManager.Event.Publish(new InfoButtonTextEvent(isHeld));
     }
 
     public void Drop(Vector3 releaseVelocity)
@@ -59,7 +59,7 @@ public class PeakCarryable : MonoBehaviour
             SetCollidersEnabled(true);
 
         isHeld = false;
-        GameManager.Event.Publish(EventType.InfoButtonText, isHeld);
+        GameManager.Event.Publish(new InfoButtonTextEvent(isHeld));
     }
 
     private void SetCollidersEnabled(bool enabled)

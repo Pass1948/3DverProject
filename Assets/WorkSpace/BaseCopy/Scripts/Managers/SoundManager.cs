@@ -3,7 +3,7 @@ using UnityEngine.Audio;
 using System.Collections;
 using System.Collections.Generic;
 
-public class SoundManager : MonoBehaviour
+public class SoundManager : ManagerBase
 {
     private AudioMixer mixer;
     private readonly string masterVolumeParam = "Master";
@@ -27,7 +27,7 @@ public class SoundManager : MonoBehaviour
         { "PlayScene",  "PlayBGM"  },
     };
 
-    private void Awake()
+    protected override void Initialize()
     {
         InitializeDB();  // DB를 딕셔너리로 빌드
         // 필요하면 여기서 씬 이벤트 구독 후 씬 진입 시 PlaySceneBGM 호출
@@ -36,12 +36,12 @@ public class SoundManager : MonoBehaviour
     // ===================== DB 초기화 =====================
     private void InitializeDB()
     {
-        mixer = GameManager.Resource.Load<AudioMixer>(GamePath.Sound + "AudioMixer");
-        bgmSource = GameManager.Resource.Instantiate<AudioSource>(GamePath.Sound+"BGM", this.transform);
-        sfxSource = GameManager.Resource.Instantiate<AudioSource>(GamePath.Sound + "SFX", this.transform);
+        mixer = GameManager.Resource.Load<AudioMixer>(CorePaths.AudioMixer);
+        bgmSource = GameManager.Resource.Instantiate<AudioSource>(CorePaths.BGMSource, this.transform);
+        sfxSource = GameManager.Resource.Instantiate<AudioSource>(CorePaths.SFXSource, this.transform);
 
         // db 를 들고있을때 실제 오브젝트 참조하고 있다면 메모리 점유가 커짐 -> 이후 어드레서블 이용하면 개선 가능
-        soundDB = GameManager.Resource.Load<SoundData>(GamePath.Data+"SoundData");
+        soundDB = GameManager.Resource.Load<SoundData>(CorePaths.SoundData);
 
         soundDict.Clear();
 
@@ -259,7 +259,7 @@ public class SoundManager : MonoBehaviour
 
     private AudioClip GetAudioClip(SoundDataSO data)
     {
-        AudioClip a = GameManager.Resource.Load<AudioClip>(GamePath.Sound + data.soundName);
+        AudioClip a = GameManager.Resource.Load<AudioClip>(CorePaths.SoundRoot + data.soundName);
         if (data == null || data.soundName == null || a == null) return null;
         return a;
     }

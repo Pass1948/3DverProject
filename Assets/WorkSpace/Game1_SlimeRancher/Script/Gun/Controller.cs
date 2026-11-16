@@ -316,7 +316,7 @@ public class Controller : MonoBehaviour
         if(!isRelease) return;
         if (isLookOff) return;
         if (Time.time < nextEjectTime) return;
-        if (GameManager.Unit.game1Player.inventory.TryEject(selectedSlot, muzzle.position, muzzle.forward, ejectImpulse))
+        if (GameManager.Unit.Get<Game1Player>().inventory.TryEject(selectedSlot, muzzle.position, muzzle.forward, ejectImpulse))
             nextEjectTime = Time.time + ejectInterval;
         else
             nextEjectTime = Time.time + 0.05f; // 배출 실패 시 재시도 간격 (조정 가능)
@@ -333,7 +333,7 @@ public class Controller : MonoBehaviour
         else if (kb.digit3Key.wasPressedThisFrame || kb.numpad3Key.wasPressedThisFrame) selectedSlot = 2;
         else if (kb.digit4Key.wasPressedThisFrame || kb.numpad4Key.wasPressedThisFrame) selectedSlot = 3;
 
-        GameManager.Event.Publish(EventType.SelectSlot, selectedSlot); // 슬롯 선택 이벤트 발행
+        GameManager.Event.Publish(new SelectSlotEvent(selectedSlot)); // 슬롯 선택 이벤트 발행
     }
 
     //==================== Debug Draw ====================

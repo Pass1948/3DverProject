@@ -6,7 +6,7 @@ public class Game1Player : MonoBehaviour
     public Game1Inventory inventory;
     private void Awake()
     {
-        GameManager.Unit.Game1Player = this;
+        GameManager.Unit.Register(this);
         controller = GetComponent<Controller>();
         inventory = GetComponent<Game1Inventory>();
     }

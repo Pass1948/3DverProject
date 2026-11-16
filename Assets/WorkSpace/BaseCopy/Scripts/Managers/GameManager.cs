@@ -1,8 +1,6 @@
-using UnityEngine;
-using System.Collections.Generic;
-using System.Resources;
+﻿using UnityEngine;
 
-[DefaultExecutionOrder(-100)]       // GameManager�� �ٸ� Script���� ���� ȣ��ǰ� ����
+[DefaultExecutionOrder(-100)]       // GameManager가 다른 Script보다 먼저 호출되게 설정
 public class GameManager : MonoBehaviour
 {
     private static GameManager instance;
@@ -26,21 +24,39 @@ public class GameManager : MonoBehaviour
     private static UnitManager unitManager;
     public static UnitManager Unit => unitManager;
 
-    async void Awake()
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetStatics()
+    {
+        instance = null;
+        ClearManagerFields();
+    }
+
+    private void Awake()
     {
         if (instance != null) { Destroy(this); return; }
         instance = this;
         DontDestroyOnLoad(this);
-        InitManagers();
+        CreateManagers();
+        InitializeManagers();
     }
 
     private void OnDestroy()
     {
-        if (instance == this)
-            instance = null;
+        if (instance != this) return;
+
+        // 초기화의 역순으로 종료
+        uiManager?.RunShutdown();
+        soundManager?.RunShutdown();
+        unitManager?.RunShutdown();
+        eventManager?.RunShutdown();
+        poolManager?.RunShutdown();
+        resourceManager?.RunShutdown();
+
+        ClearManagerFields();
+        instance = null;
     }
 
-    private void InitManagers()
+    private void CreateManagers()
     {
         resourceManager = CreateChildManager<ResourceManager>("ResourceManager");
         poolManager = CreateChildManager<PoolManager>("PoolManager");
@@ -48,6 +64,27 @@ public class GameManager : MonoBehaviour
         eventManager = CreateChildManager<EventManager>("EventManager");
         soundManager = CreateChildManager<SoundManager>("SoundManager");
         unitManager = CreateChildManager<UnitManager>("UnitManager");
+    }
+
+    // 생성이 모두 끝난 뒤 Resource → Pool → Event → Unit → Sound → UI 순서로 초기화
+    private void InitializeManagers()
+    {
+        resourceManager.RunInitialize();
+        poolManager.RunInitialize();
+        eventManager.RunInitialize();
+        unitManager.RunInitialize();
+        soundManager.RunInitialize();
+        uiManager.RunInitialize();
+    }
+
+    private static void ClearManagerFields()
+    {
+        resourceManager = null;
+        poolManager = null;
+        uiManager = null;
+        eventManager = null;
+        soundManager = null;
+        unitManager = null;
     }
 
     private T CreateChildManager<T>(string goName) where T : Component

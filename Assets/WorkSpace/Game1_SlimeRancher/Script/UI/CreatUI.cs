@@ -13,6 +13,6 @@ public class CreatUI : PopUpUI
 
     private void SpawnSlime()
     {
-        GameManager.Event.Publish(EventType.Spawn);
+        GameManager.Event.Publish(new SpawnEvent());
     }
 }

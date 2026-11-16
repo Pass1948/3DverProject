@@ -19,14 +19,14 @@ public class Spawner : MonoBehaviour
 
     private void OnEnable()
     {
-        GameManager.Event.Subscribe(EventType.Spawn, Spawn);
+        GameManager.Event.Subscribe<SpawnEvent>(Spawn);
     }
     private void OnDisable()
     {
-        GameManager.Event.Unsubscribe(EventType.Spawn, Spawn);
+        GameManager.Event.Unsubscribe<SpawnEvent>(Spawn);
     }
 
-    private void Spawn()
+    private void Spawn(SpawnEvent e)
     {
         int i = Random.Range(0, 5);
 

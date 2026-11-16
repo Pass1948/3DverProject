@@ -1,15 +1,14 @@
 using System.Collections.Generic;
-using UnityEditor.PackageManager.UI;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
-public class UIManager : MonoBehaviour
+public class UIManager : ManagerBase
 {
     private Canvas windowCanvas;
     private Canvas popUpCanvas;
     private Stack<PopUpUI> popUpStack;
 
-    private void Awake()
+    protected override void Initialize()
     {
         InstantsWindowUI();
         InstantsPopUpUI();
@@ -38,7 +37,7 @@ public class UIManager : MonoBehaviour
         if (windowCanvas == null)
         {
             // 메인 경로는 상수로
-            windowCanvas = GameManager.Resource.Instantiate<Canvas>(GamePath.Canvas);
+            windowCanvas = GameManager.Resource.Instantiate<Canvas>(CorePaths.Canvas);
             windowCanvas.gameObject.name = "WindowCanvas";
             windowCanvas.sortingOrder = 10;
         }
@@ -47,7 +46,7 @@ public class UIManager : MonoBehaviour
     {
         if (popUpCanvas == null)
         {
-            popUpCanvas = GameManager.Resource.Instantiate<Canvas>(GamePath.Canvas);
+            popUpCanvas = GameManager.Resource.Instantiate<Canvas>(CorePaths.Canvas);
             popUpCanvas.gameObject.name = "PopUpCanvas";
             popUpCanvas.sortingOrder = 100;
             popUpStack = new Stack<PopUpUI>();
@@ -58,7 +57,7 @@ public class UIManager : MonoBehaviour
         if (EventSystem.current != null)
             return;
 
-        EventSystem eventSystem = GameManager.Resource.Load<EventSystem>(GamePath.UI + "EventSystem");
+        EventSystem eventSystem = GameManager.Resource.Load<EventSystem>(CorePaths.EventSystem);
         GameManager.Resource.Instantiate(eventSystem, transform);
     }
 

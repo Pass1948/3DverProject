@@ -8,7 +8,7 @@ public class EnterMuzzle : MonoBehaviour
             return;
         if (!other.TryGetComponent<Slime>(out var item))
             return;
-        var inv = GameManager.Unit.game1Player.inventory;
+        var inv = GameManager.Unit.Get<Game1Player>().inventory;
         if (inv.TryAdd(item.id, item.amount))
         {
             // 흡수되는 효과음

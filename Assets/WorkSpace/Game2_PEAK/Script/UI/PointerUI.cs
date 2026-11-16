@@ -20,20 +20,23 @@ public class PointerUI : WindowUI
 
     private void OnEnable()
     {
-        GameManager.Event.Subscribe<bool, LocomotionState, float>(EventType.ClimbCheck, ChangePointer);
-        GameManager.Event.Subscribe<PeakCarryable>(EventType.InteractText, CheckItem);
-        GameManager.Event.Subscribe<bool>(EventType.InfoButtonText, InfoButtonText);
+        GameManager.Event.Subscribe<ClimbCheckEvent>(ChangePointer);
+        GameManager.Event.Subscribe<InteractTextEvent>(CheckItem);
+        GameManager.Event.Subscribe<InfoButtonTextEvent>(InfoButtonText);
     }
 
     private void OnDisable()
     {
-        GameManager.Event.Unsubscribe<bool, LocomotionState, float>(EventType.ClimbCheck, ChangePointer);
-        GameManager.Event.Unsubscribe<PeakCarryable>(EventType.InteractText, CheckItem);
-        GameManager.Event.Unsubscribe<bool>(EventType.InfoButtonText, InfoButtonText);
+        GameManager.Event.Unsubscribe<ClimbCheckEvent>(ChangePointer);
+        GameManager.Event.Unsubscribe<InteractTextEvent>(CheckItem);
+        GameManager.Event.Unsubscribe<InfoButtonTextEvent>(InfoButtonText);
     }
 
-    private void ChangePointer(bool climb, LocomotionState state, float stamina)
+    private void ChangePointer(ClimbCheckEvent e)
     {
+        bool climb = e.HasClimbSurface;
+        LocomotionState state = e.State;
+        float stamina = e.Stamina;
         if (stamina > 2f && climb && state == LocomotionState.Grounded || stamina > 2f && climb && state == LocomotionState.Airborne)
         {
             uiImage.sprite = climbCheckPointer;
@@ -48,13 +51,15 @@ public class PointerUI : WindowUI
         }
     }
 
-    private void CheckItem(PeakCarryable item)
+    private void CheckItem(InteractTextEvent e)
     {
+        PeakCarryable item = e.Target;
         interactText.SetActive(item != null);
     }
 
-    private void InfoButtonText(bool isheld)
+    private void InfoButtonText(InfoButtonTextEvent e)
     {
+        bool isheld = e.IsHeld;
         dropButtonText.SetActive(isheld);
     }
 
