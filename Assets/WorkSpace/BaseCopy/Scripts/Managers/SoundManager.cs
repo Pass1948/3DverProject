@@ -1,53 +1,90 @@
-using UnityEngine;
-using UnityEngine.Audio;
+ï»¿using System;
 using System.Collections;
 using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.Audio;
+using UnityEngine.SceneManagement;
 
 public class SoundManager : ManagerBase
 {
+    private const string MasterVolumeParam = "Master";
+    private const string BgmVolumeParam = "BGM";
+    private const string SfxVolumeParam = "SFX";
+
     private AudioMixer mixer;
-    private readonly string masterVolumeParam = "Master";
-    private readonly string bgmVolumeParam = "BGM";
-    private readonly string sfxVolumeParam = "SFX";
     private AudioSource bgmSource;
     private AudioSource sfxSource;
     private SoundDataSO currentBGM;
     private Coroutine fadeCoroutine;
     private SoundData soundDB;
 
-    // ÀÌ¸§ ¡æ µ¥ÀÌÅÍ ¸ÅÇÎ
-    private readonly Dictionary<string, SoundDataSO> soundDict = new();
+    private bool isBgmMuted;
+    private bool isSfxMuted;
+    private bool mixerWarned;
+    private Action<SceneLoadedEvent> sceneLoadedHandler;
 
-    // (¿É¼Ç) ¾Àº° BGM ¸ÅÇÎ: ¾ÀÀÌ¸§ ¡æ soundName
-    // string À¸·Î string À» ¸ÅÇÎÇØ¼­ ÀÇ¹Ì°¡ Å©°Ô ¾øÀ»µí?
-    private Dictionary<string, string> sceneBGMMapping = new()
+    // ì´ë¦„ â†’ ë°ì´í„° ë§¤í•‘
+    private readonly Dictionary<string, SoundDataSO> soundDict = new Dictionary<string, SoundDataSO>();
+
+    private enum SceneBGMAction { Play, Stop }
+
+    private class SceneBGMRule
     {
-        { "StartScene", "StartBGM" },
-        { "MainScene",  "MainBGM"  },
-        { "PlayScene",  "PlayBGM"  },
-    };
+        public SceneBGMAction action;
+        public string bgmName;
+        public float fadeSeconds;
+    }
+
+    // ì”¬ë³„ BGM ê·œì¹™: ì”¬ ê²½ë¡œ â†’ ê·œì¹™ (ê·œì¹™ ì—†ìŒ = ìœ ì§€)
+    private readonly Dictionary<string, SceneBGMRule> sceneBGMMap = new Dictionary<string, SceneBGMRule>();
 
     protected override void Initialize()
     {
-        InitializeDB();  // DB¸¦ µñ¼Å³Ê¸®·Î ºôµå
-        // ÇÊ¿äÇÏ¸é ¿©±â¼­ ¾À ÀÌº¥Æ® ±¸µ¶ ÈÄ ¾À ÁøÀÔ ½Ã PlaySceneBGM È£Ãâ
-    }
-
-    // ===================== DB ÃÊ±âÈ­ =====================
-    private void InitializeDB()
-    {
         mixer = GameManager.Resource.Load<AudioMixer>(CorePaths.AudioMixer);
+        if (mixer == null) Debug.LogWarning("[SoundManager] AudioMixerë¥¼ ë¶ˆëŸ¬ì˜¤ì§€ ëª»í–ˆìŠµë‹ˆë‹¤.", this);
+
         bgmSource = GameManager.Resource.Instantiate<AudioSource>(CorePaths.BGMSource, this.transform);
         sfxSource = GameManager.Resource.Instantiate<AudioSource>(CorePaths.SFXSource, this.transform);
+        if (bgmSource == null) Debug.LogWarning("[SoundManager] BGM AudioSourceë¥¼ ë§Œë“¤ì§€ ëª»í–ˆìŠµë‹ˆë‹¤.", this);
+        if (sfxSource == null) Debug.LogWarning("[SoundManager] SFX AudioSourceë¥¼ ë§Œë“¤ì§€ ëª»í–ˆìŠµë‹ˆë‹¤.", this);
+        if (bgmSource != null) bgmSource.mute = isBgmMuted;
+        if (sfxSource != null) sfxSource.mute = isSfxMuted;
 
-        // db ¸¦ µé°íÀÖÀ»¶§ ½ÇÁ¦ ¿ÀºêÁ§Æ® ÂüÁ¶ÇÏ°í ÀÖ´Ù¸é ¸Ş¸ğ¸® Á¡À¯°¡ Ä¿Áü -> ÀÌÈÄ ¾îµå·¹¼­ºí ÀÌ¿ëÇÏ¸é °³¼± °¡´É
+        BuildDB();
+
+        sceneLoadedHandler = OnSceneLoaded;
+        GameManager.Event?.Subscribe(sceneLoadedHandler);
+    }
+
+    protected override void Shutdown()
+    {
+        if (sceneLoadedHandler != null)
+        {
+            GameManager.Event?.Unsubscribe(sceneLoadedHandler);
+            sceneLoadedHandler = null;
+        }
+
+        if (fadeCoroutine != null)
+        {
+            StopCoroutine(fadeCoroutine);
+            fadeCoroutine = null;
+        }
+
+        soundDict.Clear();
+        sceneBGMMap.Clear();
+    }
+
+    // ===================== DB =====================
+    private void BuildDB()
+    {
+        // db ë¥¼ ë“¤ê³ ìˆì„ë•Œ ì‹¤ì œ ì˜¤ë¸Œì íŠ¸ ì°¸ì¡°í•˜ê³  ìˆë‹¤ë©´ ë©”ëª¨ë¦¬ ì ìœ ê°€ ì»¤ì§ -> ì´í›„ ì–´ë“œë ˆì„œë¸” ì´ìš©í•˜ë©´ ê°œì„  ê°€ëŠ¥
         soundDB = GameManager.Resource.Load<SoundData>(CorePaths.SoundData);
 
         soundDict.Clear();
 
         if (soundDB == null || soundDB.soundInfo == null || soundDB.soundInfo.Count == 0)
         {
-            Debug.LogWarning("[SoundManager] SoundDB ºñ¾îÀÖÀ½. SoundData SO¸¦ ÇÒ´çÇÏ°í Ç×¸ñÀ» Ãß°¡ÇÏ¼¼¿ä.", this);
+            Debug.LogWarning("[SoundManager] SoundDB ë¹„ì–´ìˆìŒ. SoundData SOë¥¼ í• ë‹¹í•˜ê³  í•­ëª©ì„ ì¶”ê°€í•˜ì„¸ìš”.", this);
             return;
         }
 
@@ -56,40 +93,76 @@ public class SoundManager : ManagerBase
             if (d == null) continue;
             if (string.IsNullOrWhiteSpace(d.soundName))
             {
-                Debug.LogWarning("[SoundManager] soundNameÀÌ ºñ¾îÀÖ´Â Ç×¸ñÀÌ ÀÖ½À´Ï´Ù.", this);
+                Debug.LogWarning("[SoundManager] soundNameì´ ë¹„ì–´ìˆëŠ” í•­ëª©ì´ ìˆìŠµë‹ˆë‹¤.", this);
                 continue;
             }
             if (!soundDict.TryAdd(d.soundName, d))
             {
-                Debug.LogWarning($"[SoundManager] Áßº¹ soundName: {d.soundName}. Ã¹ Ç×¸ñ¸¸ »ç¿ëÇÕ´Ï´Ù.", this);
+                Debug.LogWarning($"[SoundManager] ì¤‘ë³µ soundName: {d.soundName}. ì²« í•­ëª©ë§Œ ì‚¬ìš©í•©ë‹ˆë‹¤.", this);
             }
         }
     }
 
-    // ===================== ¾Àº° BGM =====================
-    public void PlaySceneBGM(string sceneName)
+    public void ReloadDB()
     {
-        if (sceneBGMMapping != null && sceneBGMMapping.TryGetValue(sceneName, out string bgmName))
-            PlayBGM(bgmName);
+        BuildDB();
     }
 
-    // ===================== Static ÇïÆÛ =====================
-    public static void OnPlaySound(string soundName)
+    // ===================== ì”¬ë³„ BGM =====================
+    public void SetSceneBGM(string scenePath, string bgmName, float fadeSeconds = 0f)
     {
-        GameManager.Sound.PlaySound(soundName);
-    }
-    public static void OnPlaySound(SoundDataSO soundData)
-    {
-        GameManager.Sound.PlaySound(soundData);
+        if (string.IsNullOrEmpty(scenePath) || string.IsNullOrEmpty(bgmName))
+        {
+            Debug.LogWarning("[SoundManager] SetSceneBGM: scenePathì™€ bgmNameì€ ë¹„ì–´ ìˆì„ ìˆ˜ ì—†ìŠµë‹ˆë‹¤.", this);
+            return;
+        }
+        sceneBGMMap[scenePath] = new SceneBGMRule { action = SceneBGMAction.Play, bgmName = bgmName, fadeSeconds = fadeSeconds };
     }
 
-    // ===================== ÀÌ¸§/µ¥ÀÌÅÍ·Î Àç»ı =====================
+    public void SetSceneBGMStop(string scenePath, float fadeSeconds = 0f)
+    {
+        if (string.IsNullOrEmpty(scenePath))
+        {
+            Debug.LogWarning("[SoundManager] SetSceneBGMStop: scenePathëŠ” ë¹„ì–´ ìˆì„ ìˆ˜ ì—†ìŠµë‹ˆë‹¤.", this);
+            return;
+        }
+        sceneBGMMap[scenePath] = new SceneBGMRule { action = SceneBGMAction.Stop, fadeSeconds = fadeSeconds };
+    }
+
+    public void RemoveSceneBGM(string scenePath)
+    {
+        if (string.IsNullOrEmpty(scenePath)) return;
+        sceneBGMMap.Remove(scenePath);
+    }
+
+    public void ClearSceneBGM()
+    {
+        sceneBGMMap.Clear();
+    }
+
+    private void OnSceneLoaded(SceneLoadedEvent e)
+    {
+        if (e.Mode != LoadSceneMode.Single) return;
+        if (!sceneBGMMap.TryGetValue(e.Path, out SceneBGMRule rule)) return;
+
+        if (rule.action == SceneBGMAction.Play)
+        {
+            if (rule.fadeSeconds > 0f) ChangeBGM(rule.bgmName, rule.fadeSeconds);
+            else PlayBGM(rule.bgmName);
+        }
+        else
+        {
+            StopBGM(rule.fadeSeconds);
+        }
+    }
+
+    // ===================== ì´ë¦„/ë°ì´í„°ë¡œ ì¬ìƒ =====================
     public void PlaySound(string soundName)
     {
         if (TryGet(soundName, out var data))
             PlaySound(data);
         else
-            Debug.LogWarning($"[SoundManager] »ç¿îµå ¹Ìµî·Ï: {soundName}", this);
+            Debug.LogWarning($"[SoundManager] ì‚¬ìš´ë“œ ë¯¸ë“±ë¡: {soundName}", this);
     }
 
     public void PlaySound(SoundDataSO data)
@@ -106,23 +179,31 @@ public class SoundManager : ManagerBase
         if (TryGet(soundName, out var data))
             PlayBGM(data, loop);
         else
-            Debug.LogWarning($"[SoundManager] BGM ¹Ìµî·Ï: {soundName}", this);
+            Debug.LogWarning($"[SoundManager] BGM ë¯¸ë“±ë¡: {soundName}", this);
     }
 
     public void PlayBGM(SoundDataSO data, bool loop = true)
     {
-        if (data == null || data.soundType != SoundType.BGM) return;
+        if (data == null || bgmSource == null) return;
+
+        if (data.soundType != SoundType.BGM)
+        {
+            Debug.LogWarning($"[SoundManager] BGM íƒ€ì…ì´ ì•„ë‹™ë‹ˆë‹¤: {data.soundName}", this);
+            return;
+        }
+
+        StopFade();
 
         var clip = GetAudioClip(data);
         if (clip == null)
         {
-            Debug.LogWarning($"[SoundManager] BGM Å¬¸³ ¾øÀ½: {data.soundName}", this);
+            Debug.LogWarning($"[SoundManager] BGM í´ë¦½ ì—†ìŒ: Resources/Sound/{data.soundName} (íŒŒì¼ ì´ë¦„ì€ soundNameê³¼ ê°™ì•„ì•¼ í•©ë‹ˆë‹¤)", this);
             return;
         }
 
         bgmSource.loop = loop;
 
-        // µ¿ÀÏ Å¬¸³ÀÌ¸é ³Ñ¾î°¥Áö ¿©ºÎ´Â ¼±ÅÃ. º¼·ı¸¸ °»½ÅÇÏ°í Àç»ı À¯Áö.
+        // ë™ì¼ í´ë¦½ì´ë©´ ë³¼ë¥¨ë§Œ ê°±ì‹ í•˜ê³  ì¬ìƒ ìœ ì§€.
         if (bgmSource.clip == clip && bgmSource.isPlaying)
         {
             bgmSource.volume = data.volume;
@@ -136,60 +217,130 @@ public class SoundManager : ManagerBase
         currentBGM = data;
     }
 
-    // ===================== SFX =====================
-    public void PlaySFX(string soundName)
+    public void StopBGM(float fadeSeconds = 0f)
     {
-        if (TryGet(soundName, out var data)) PlaySFX(data);
-        else Debug.LogWarning($"[SoundManager] SFX ¹Ìµî·Ï: {soundName}", this);
+        if (bgmSource == null || !bgmSource.isPlaying)
+        {
+            currentBGM = null;
+            return;
+        }
+
+        StopFade();
+
+        if (fadeSeconds <= 0f)
+        {
+            bgmSource.Stop();
+            currentBGM = null;
+            return;
+        }
+
+        fadeCoroutine = StartCoroutine(StopBGMCoroutine(fadeSeconds));
     }
 
-    public void PlaySFX(SoundDataSO data)
+    public void ChangeBGM(string soundName, float fadeSeconds, bool loop = true)
     {
-        if (data == null || data.soundType != SoundType.SFX) return;
+        if (!TryGet(soundName, out var data))
+        {
+            Debug.LogWarning($"[SoundManager] BGM ë¯¸ë“±ë¡: {soundName}", this);
+            return;
+        }
+        if (bgmSource == null) return;
+
+        if (data.soundType != SoundType.BGM)
+        {
+            Debug.LogWarning($"[SoundManager] BGM íƒ€ì…ì´ ì•„ë‹™ë‹ˆë‹¤: {data.soundName}", this);
+            return;
+        }
 
         var clip = GetAudioClip(data);
         if (clip == null)
         {
-            Debug.LogWarning($"[SoundManager] SFX Å¬¸³ ¾øÀ½: {data.soundName}", this);
+            Debug.LogWarning($"[SoundManager] BGM í´ë¦½ ì—†ìŒ: Resources/Sound/{data.soundName} (íŒŒì¼ ì´ë¦„ì€ soundNameê³¼ ê°™ì•„ì•¼ í•©ë‹ˆë‹¤)", this);
             return;
         }
 
-        sfxSource.volume = data.volume;
-        sfxSource.PlayOneShot(clip);
+        // ê°™ì€ ê³¡ì´ ì¬ìƒ ì¤‘ì´ë©´ ì¬ì‹œì‘í•˜ì§€ ì•Šê³  ë³¼ë¥¨ë§Œ ê°±ì‹ 
+        if (bgmSource.clip == clip && bgmSource.isPlaying)
+        {
+            StopFade();
+            bgmSource.loop = loop;
+            bgmSource.volume = data.volume;
+            currentBGM = data;
+            return;
+        }
+
+        if (fadeSeconds <= 0f || !bgmSource.isPlaying)
+        {
+            PlayBGM(data, loop);
+            return;
+        }
+
+        StopFade();
+        currentBGM = data;
+        fadeCoroutine = StartCoroutine(ChangeBGMCoroutine(clip, data, loop, fadeSeconds));
     }
 
-    // ===================== º¼·ı/¹ÂÆ® =====================
-    public static void SetMute(SoundType type, bool isOn)
+    // ===================== SFX =====================
+    public void PlaySFX(string soundName)
+    {
+        if (TryGet(soundName, out var data)) PlaySFX(data);
+        else Debug.LogWarning($"[SoundManager] SFX ë¯¸ë“±ë¡: {soundName}", this);
+    }
+
+    public void PlaySFX(SoundDataSO data)
+    {
+        if (data == null || sfxSource == null) return;
+
+        if (data.soundType != SoundType.SFX)
+        {
+            Debug.LogWarning($"[SoundManager] SFX íƒ€ì…ì´ ì•„ë‹™ë‹ˆë‹¤: {data.soundName}", this);
+            return;
+        }
+
+        var clip = GetAudioClip(data);
+        if (clip == null)
+        {
+            Debug.LogWarning($"[SoundManager] SFX í´ë¦½ ì—†ìŒ: Resources/Sound/{data.soundName} (íŒŒì¼ ì´ë¦„ì€ soundNameê³¼ ê°™ì•„ì•¼ í•©ë‹ˆë‹¤)", this);
+            return;
+        }
+
+        sfxSource.PlayOneShot(clip, data.volume);
+    }
+
+    // ===================== ë³¼ë¥¨/ë®¤íŠ¸ =====================
+    public void SetMute(SoundType type, bool isOn)
     {
         if (type == SoundType.BGM) SetBGMMute(isOn);
         else SetSFXMute(isOn);
     }
 
-    public static void SetBGMMute(bool isOn)
+    public void SetBGMMute(bool isOn)
     {
-        if (GameManager.Sound?.bgmSource == null) return;
-        GameManager.Sound.bgmSource.mute = isOn;
+        isBgmMuted = isOn;
+        if (bgmSource != null) bgmSource.mute = isOn;
     }
 
-    public static void SetSFXMute(bool isOn)
+    public void SetSFXMute(bool isOn)
     {
-        if (GameManager.Sound?.sfxSource == null) return;
-        GameManager.Sound.sfxSource.mute = isOn;
+        isSfxMuted = isOn;
+        if (sfxSource != null) sfxSource.mute = isOn;
     }
 
     public void SetVolume(VolumeType type, float volume)
     {
-        string param = type == VolumeType.Master ? masterVolumeParam : type == VolumeType.BGM ? bgmVolumeParam : sfxVolumeParam;
+        if (!CheckMixer()) return;
+
+        string param = GetVolumeParam(type);
         float volumeDB = (volume <= 0.0001f) ? -80f : Mathf.Log10(Mathf.Clamp01(volume)) * 20f;
         mixer.SetFloat(param, volumeDB);
     }
 
     public float GetVolume(VolumeType type)
     {
-        string param = type == VolumeType.Master ? masterVolumeParam :
-                       type == VolumeType.BGM ? bgmVolumeParam : sfxVolumeParam;
+        if (!CheckMixer()) return 1f;
 
-        if (mixer != null && mixer.GetFloat(param, out float db))
+        string param = GetVolumeParam(type);
+        if (mixer.GetFloat(param, out float db))
             return Mathf.Pow(10f, db / 20f);
 
         return 1f;
@@ -202,25 +353,53 @@ public class SoundManager : ManagerBase
         SetVolume(VolumeType.SFX, 1f);
     }
 
-    // ===================== ÆäÀÌµå =====================
+    private static string GetVolumeParam(VolumeType type)
+    {
+        return type == VolumeType.Master ? MasterVolumeParam : type == VolumeType.BGM ? BgmVolumeParam : SfxVolumeParam;
+    }
+
+    private bool CheckMixer()
+    {
+        if (mixer != null) return true;
+        if (!mixerWarned)
+        {
+            mixerWarned = true;
+            Debug.LogWarning("[SoundManager] AudioMixerê°€ ì—†ì–´ ë³¼ë¥¨ì„ ì²˜ë¦¬í•  ìˆ˜ ì—†ìŠµë‹ˆë‹¤.", this);
+        }
+        return false;
+    }
+
+    // ===================== í˜ì´ë“œ =====================
     public void FadeOutBGM(float duration)
     {
         if (currentBGM == null || bgmSource == null) return;
-        if (fadeCoroutine != null) StopCoroutine(fadeCoroutine);
+        StopFade();
         fadeCoroutine = StartCoroutine(FadeVolumeCoroutine(bgmSource.volume, 0f, duration));
     }
 
     public void FadeInBGM(float duration)
     {
         if (currentBGM == null || bgmSource == null) return;
-        if (fadeCoroutine != null) StopCoroutine(fadeCoroutine);
-        // targetÀ» currentBGM.volume·Î
+        StopFade();
+        // targetì„ currentBGM.volumeë¡œ
         fadeCoroutine = StartCoroutine(FadeVolumeCoroutine(bgmSource.volume, currentBGM.volume, duration));
     }
 
-    private System.Collections.IEnumerator FadeVolumeCoroutine(float from, float to, float duration)
+    private void StopFade()
     {
-        if (duration <= 0f) { bgmSource.volume = to; yield break; }
+        if (fadeCoroutine == null) return;
+        StopCoroutine(fadeCoroutine);
+        fadeCoroutine = null;
+    }
+
+    private IEnumerator FadeVolumeCoroutine(float from, float to, float duration)
+    {
+        if (duration <= 0f)
+        {
+            bgmSource.volume = to;
+            fadeCoroutine = null;
+            yield break;
+        }
 
         float t = 0f;
         while (t < duration)
@@ -230,9 +409,53 @@ public class SoundManager : ManagerBase
             yield return null;
         }
         bgmSource.volume = to;
+        fadeCoroutine = null;
     }
 
-    // ===================== À¯Æ¿ =====================
+    private IEnumerator StopBGMCoroutine(float duration)
+    {
+        float from = bgmSource.volume;
+        float t = 0f;
+        while (t < duration)
+        {
+            t += Time.unscaledDeltaTime;
+            bgmSource.volume = Mathf.Lerp(from, 0f, t / duration);
+            yield return null;
+        }
+        bgmSource.volume = 0f;
+        bgmSource.Stop();
+        currentBGM = null;
+        fadeCoroutine = null;
+    }
+
+    private IEnumerator ChangeBGMCoroutine(AudioClip clip, SoundDataSO data, bool loop, float duration)
+    {
+        float from = bgmSource.volume;
+        float t = 0f;
+        while (t < duration)
+        {
+            t += Time.unscaledDeltaTime;
+            bgmSource.volume = Mathf.Lerp(from, 0f, t / duration);
+            yield return null;
+        }
+
+        bgmSource.volume = 0f;
+        bgmSource.loop = loop;
+        bgmSource.clip = clip;
+        bgmSource.Play();
+
+        t = 0f;
+        while (t < duration)
+        {
+            t += Time.unscaledDeltaTime;
+            bgmSource.volume = Mathf.Lerp(0f, data.volume, t / duration);
+            yield return null;
+        }
+        bgmSource.volume = data.volume;
+        fadeCoroutine = null;
+    }
+
+    // ===================== ìœ í‹¸ =====================
     private bool TryGet(string soundName, out SoundDataSO data)
     {
         if (string.IsNullOrWhiteSpace(soundName))
@@ -241,26 +464,13 @@ public class SoundManager : ManagerBase
             return false;
         }
 
-        if (soundDict.TryGetValue(soundName, out data) && data != null)
-            return true;
-
-        // DB°¡ °»½ÅµÇ¾úÀ» ¼ö ÀÖÀ¸´Ï ÇÑ ¹ø Àçºôµå ½Ãµµ(¿É¼Ç)
-        InitializeDB();
         return soundDict.TryGetValue(soundName, out data) && data != null;
     }
 
-    private AudioClip GetRandomClip(SoundDataSO data)
-    {
-        if (data == null || data.audioClips == null || data.audioClips.Length == 0) return null;
-        if (data.audioClips.Length == 1) return data.audioClips[0];
-        int idx = Random.Range(0, data.audioClips.Length);
-        return data.audioClips[idx];
-    }
-
+    // SoundDataSO.audioClipsëŠ” ì´ë²ˆ ë²„ì „ì—ì„œ ì‚¬ìš©í•˜ì§€ ì•ŠëŠ”ë‹¤. (R5ì—ì„œ ì¬ì •ì˜)
     private AudioClip GetAudioClip(SoundDataSO data)
     {
-        AudioClip a = GameManager.Resource.Load<AudioClip>(CorePaths.SoundRoot + data.soundName);
-        if (data == null || data.soundName == null || a == null) return null;
-        return a;
+        if (data == null || string.IsNullOrEmpty(data.soundName)) return null;
+        return GameManager.Resource.Load<AudioClip>(CorePaths.SoundRoot + data.soundName);
     }
 }

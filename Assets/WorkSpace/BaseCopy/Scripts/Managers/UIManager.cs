@@ -1,68 +1,68 @@
+ï»¿using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
 public class UIManager : ManagerBase
 {
+    private const int WindowSortingOrder = 10;
+    private const int PopUpSortingOrder = 100;
+
     private Canvas windowCanvas;
     private Canvas popUpCanvas;
-    private Stack<PopUpUI> popUpStack;
+    private readonly Stack<PopUpUI> popUpStack = new Stack<PopUpUI>();
+    private readonly List<WindowUI> openWindows = new List<WindowUI>();
 
     protected override void Initialize()
     {
-        InstantsWindowUI();
-        InstantsPopUpUI();
+        windowCanvas = CreateCanvas("WindowCanvas", WindowSortingOrder);
+        popUpCanvas = CreateCanvas("PopUpCanvas", PopUpSortingOrder);
+        if (popUpCanvas != null)
+            GameManager.Pool.SetUIRoot(popUpCanvas.transform);   // ë°˜ë‚©ëœ UIëŠ” ë¹„í™œì„± ìƒíƒœë¡œ ë³´ê´€
         EnsureEventSystem();
     }
-    // Scene º¯°æ½Ã UI¸¦ Àç»ı¼º ¸Ş¼Òµå
-    public void Recreated()
-    {
-        Clear();
-        InstantsWindowUI();
-        InstantsPopUpUI();
-    }
-    public void Clear()
-    {    
-        // PopUp Á¤¸®
-        popUpStack.Clear();
 
-        // Canvas Á¤¸®
-        GameManager.Resource.Destroy(windowCanvas);
-        GameManager.Resource.Destroy(popUpCanvas);
+    protected override void Shutdown()
+    {
+        CloseAll();
     }
 
-    // window, popUp, toast ±â´É µ¿ÀÏ - Àç»ç¿ë °¡´ÉÇÏ°Ô±¸¼º 
-    public void InstantsWindowUI()
+    // window, popUp, toast ê¸°ëŠ¥ ë™ì¼ - ì¬ì‚¬ìš© ê°€ëŠ¥í•˜ê²Œêµ¬ì„±
+    private Canvas CreateCanvas(string canvasName, int sortingOrder)
     {
-        if (windowCanvas == null)
-        {
-            // ¸ŞÀÎ °æ·Î´Â »ó¼ö·Î
-            windowCanvas = GameManager.Resource.Instantiate<Canvas>(CorePaths.Canvas);
-            windowCanvas.gameObject.name = "WindowCanvas";
-            windowCanvas.sortingOrder = 10;
-        }
+        // ìº”ë²„ìŠ¤ëŠ” UIManagerì˜ ìì‹ìœ¼ë¡œ ë§Œë“ ë‹¤. (ì”¬ì´ ë°”ë€Œì–´ë„ ìœ ì§€)
+        Canvas canvas = GameManager.Resource.Instantiate<Canvas>(CorePaths.Canvas, transform);
+        if (canvas == null) return null;
+        canvas.gameObject.name = canvasName;
+        canvas.sortingOrder = sortingOrder;
+        return canvas;
     }
-    public void InstantsPopUpUI()
-    {
-        if (popUpCanvas == null)
-        {
-            popUpCanvas = GameManager.Resource.Instantiate<Canvas>(CorePaths.Canvas);
-            popUpCanvas.gameObject.name = "PopUpCanvas";
-            popUpCanvas.sortingOrder = 100;
-            popUpStack = new Stack<PopUpUI>();
-        }
-    }
+
     public void EnsureEventSystem()
     {
         if (EventSystem.current != null)
             return;
 
         EventSystem eventSystem = GameManager.Resource.Load<EventSystem>(CorePaths.EventSystem);
+        if (eventSystem == null) return;
         GameManager.Resource.Instantiate(eventSystem, transform);
     }
 
+    // ===================== PopUp =====================
     public T ShowPopUpUI<T>(T popUpUI) where T : PopUpUI
     {
+        return ShowPopUpUI(popUpUI, null);
+    }
+
+    public T ShowPopUpUI<T>(string path) where T : PopUpUI
+    {
+        return ShowPopUpUI<T>(path, null);
+    }
+
+    public T ShowPopUpUI<T>(T popUpUI, Action<T> init) where T : PopUpUI
+    {
+        if (popUpUI == null || popUpCanvas == null) return null;
+
         if (popUpStack.Count > 0)
         {
             PopUpUI prevUI = popUpStack.Peek();
@@ -74,19 +74,33 @@ public class UIManager : ManagerBase
 
         popUpStack.Push(ui);
 
+        init?.Invoke(ui);
+        ui.NotifyOpened();
+
         return ui;
     }
 
-    public T ShowPopUpUI<T>(string path) where T : PopUpUI
+    public T ShowPopUpUI<T>(string path, Action<T> init) where T : PopUpUI
     {
         T ui = GameManager.Resource.Load<T>(path);
-        return ShowPopUpUI(ui);
+        if (ui == null) return null;
+        return ShowPopUpUI(ui, init);
     }
 
     public void ClosePopUpUI()
     {
+        if (popUpStack.Count == 0)
+        {
+            Debug.LogWarning("[UIManager] ë‹«ì„ íŒì—…ì´ ì—†ìŠµë‹ˆë‹¤.");
+            return;
+        }
+
         PopUpUI ui = popUpStack.Pop();
-        GameManager.Pool.Release(ui.gameObject);
+        if (ui != null)
+        {
+            ui.NotifyClosed();
+            GameManager.Pool.Release(ui.gameObject);
+        }
 
         if (popUpStack.Count > 0)
         {
@@ -95,23 +109,54 @@ public class UIManager : ManagerBase
         }
     }
 
+    public bool HasActivePopUpUI()
+    {
+        return popUpStack.Count > 0;
+    }
 
+    // ===================== Window =====================
     public T ShowWindowUI<T>(T windowUI) where T : WindowUI
     {
-        T ui = GameManager.Pool.GetUI(windowUI);
-        ui.transform.SetParent(windowCanvas.transform, false);
-        return ui;
+        return ShowWindowUI(windowUI, null);
     }
 
     public T ShowWindowUI<T>(string path) where T : WindowUI
     {
+        return ShowWindowUI<T>(path, null);
+    }
+
+    public T ShowWindowUI<T>(T windowUI, Action<T> init) where T : WindowUI
+    {
+        if (windowUI == null || windowCanvas == null) return null;
+
+        T ui = GameManager.Pool.GetUI(windowUI);
+        ui.transform.SetParent(windowCanvas.transform, false);
+
+        openWindows.Add(ui);
+
+        init?.Invoke(ui);
+        ui.NotifyOpened();
+
+        return ui;
+    }
+
+    public T ShowWindowUI<T>(string path, Action<T> init) where T : WindowUI
+    {
         T ui = GameManager.Resource.Load<T>(path);
-        return ShowWindowUI(ui);
+        if (ui == null) return null;
+        return ShowWindowUI(ui, init);
     }
 
     public void CloseWindowUI(WindowUI windowUI)
     {
-        GameManager.Pool.ReleaseUI(windowUI.gameObject);
+        if (windowUI == null || !openWindows.Remove(windowUI))
+        {
+            Debug.LogWarning("[UIManager] ì—´ë ¤ ìˆì§€ ì•Šì€ ìœˆë„ìš°ì…ë‹ˆë‹¤.");
+            return;
+        }
+
+        windowUI.NotifyClosed();
+        GameManager.Pool.Release(windowUI.gameObject);
     }
 
     public void SelectWindowUI<T>(T windowUI) where T : WindowUI
@@ -119,4 +164,19 @@ public class UIManager : ManagerBase
         windowUI.transform.SetAsLastSibling();
     }
 
+    // ===================== ì „ì²´ ë‹«ê¸° =====================
+    public void CloseAll()
+    {
+        while (popUpStack.Count > 0)
+            ClosePopUpUI();
+
+        while (openWindows.Count > 0)
+            CloseWindowUI(openWindows[openWindows.Count - 1]);
+    }
+
+    // ìº”ë²„ìŠ¤ëŠ” íŒŒê´´í•˜ì§€ ì•ŠëŠ”ë‹¤.
+    public void Clear()
+    {
+        CloseAll();
+    }
 }

@@ -95,8 +95,8 @@ internal static class EventBus<T> where T : IEvent
             publishDepth--;
             if (publishDepth == 0 && dirty)
             {
-                actions.RemoveAll(IsNull);
-                listeners.RemoveAll(IsNull);
+                actions.RemoveAll(IsNullAction);
+                listeners.RemoveAll(IsNullListener);
                 dirty = false;
             }
         }
@@ -125,8 +125,8 @@ internal static class EventBus<T> where T : IEvent
         return new EventDebugInfo { EventName = typeof(T).Name, ActionCount = actionCount, ListenerCount = listenerCount };
     }
 
-    private static bool IsNull(Action<T> a) { return a == null; }
-    private static bool IsNull(IEventListener<T> l) { return l == null; }
+    private static readonly Predicate<Action<T>> IsNullAction = a => a == null;
+    private static readonly Predicate<IEventListener<T>> IsNullListener = l => l == null;
 }
 
 internal static class EventBusRegistry

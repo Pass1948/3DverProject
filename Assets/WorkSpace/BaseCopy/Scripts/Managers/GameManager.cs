@@ -24,6 +24,9 @@ public class GameManager : MonoBehaviour
     private static UnitManager unitManager;
     public static UnitManager Unit => unitManager;
 
+    private static SceneFlowManager sceneFlowManager;
+    public static SceneFlowManager Scene => sceneFlowManager;
+
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetStatics()
     {
@@ -45,6 +48,7 @@ public class GameManager : MonoBehaviour
         if (instance != this) return;
 
         // 초기화의 역순으로 종료
+        sceneFlowManager?.RunShutdown();
         uiManager?.RunShutdown();
         soundManager?.RunShutdown();
         unitManager?.RunShutdown();
@@ -64,9 +68,10 @@ public class GameManager : MonoBehaviour
         eventManager = CreateChildManager<EventManager>("EventManager");
         soundManager = CreateChildManager<SoundManager>("SoundManager");
         unitManager = CreateChildManager<UnitManager>("UnitManager");
+        sceneFlowManager = CreateChildManager<SceneFlowManager>("SceneFlowManager");
     }
 
-    // 생성이 모두 끝난 뒤 Resource → Pool → Event → Unit → Sound → UI 순서로 초기화
+    // 생성이 모두 끝난 뒤 Resource → Pool → Event → Unit → Sound → UI → Scene 순서로 초기화
     private void InitializeManagers()
     {
         resourceManager.RunInitialize();
@@ -75,6 +80,7 @@ public class GameManager : MonoBehaviour
         unitManager.RunInitialize();
         soundManager.RunInitialize();
         uiManager.RunInitialize();
+        sceneFlowManager.RunInitialize();
     }
 
     private static void ClearManagerFields()
@@ -85,6 +91,7 @@ public class GameManager : MonoBehaviour
         eventManager = null;
         soundManager = null;
         unitManager = null;
+        sceneFlowManager = null;
     }
 
     private T CreateChildManager<T>(string goName) where T : Component

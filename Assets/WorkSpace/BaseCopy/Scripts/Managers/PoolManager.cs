@@ -1,67 +1,72 @@
-using System.Collections;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Pool;
+
 public class PoolManager : ManagerBase
 {
-    Dictionary<string, ObjectPool<GameObject>> poolDic;
-    Dictionary<string, Transform> poolContainer;
-    Transform poolRoot;
-    Canvas canvasRoot;
+    private class PoolEntry
+    {
+        public GameObject Prefab;
+        public ObjectPool<GameObject> Pool;
+        public Transform Container;
+        public bool IsUI;
+    }
+
+    // 키: 프리팹 GameObject의 InstanceID
+    private readonly Dictionary<int, PoolEntry> prefabPools = new Dictionary<int, PoolEntry>();
+    // 키: 생성된 인스턴스 GameObject의 InstanceID (반납할 때 어느 풀인지 찾기용)
+    private readonly Dictionary<int, PoolEntry> instancePools = new Dictionary<int, PoolEntry>();
+    // 현재 빌려간(활성) 인스턴스
+    private readonly HashSet<int> activeInstances = new HashSet<int>();
+
+    private Transform poolRoot;
+    private Transform uiRoot;
 
     protected override void Initialize()
     {
-        poolDic = new Dictionary<string, ObjectPool<GameObject>>();
-        poolContainer = new Dictionary<string, Transform>();
-        poolRoot = new GameObject("PoolRoot").transform;
+        EnsurePoolRoot();
     }
 
-    public void Recreated()
+    protected override void Shutdown()
     {
-        poolDic = new Dictionary<string, ObjectPool<GameObject>>();
-        poolContainer = new Dictionary<string, Transform>();
+        Clear();
+    }
+
+    private void EnsurePoolRoot()
+    {
+        if (poolRoot != null) return;
         poolRoot = new GameObject("PoolRoot").transform;
+        poolRoot.SetParent(transform, false);
+    }
+
+    // UI 풀이 반납된 UI를 보관할 부모. null이면 해당 풀의 컨테이너를 사용한다.
+    public void SetUIRoot(Transform root)
+    {
+        uiRoot = root;
     }
 
     public void Clear()
     {
-        GameManager.Resource.Destroy(canvasRoot);
+        foreach (PoolEntry entry in prefabPools.Values)
+        {
+            entry.Pool.Clear();   // 보관 중인 인스턴스 파괴
+            if (entry.Container != null)
+                Object.Destroy(entry.Container.gameObject);
+        }
+        prefabPools.Clear();
+        instancePools.Clear();    // 빌려간 인스턴스는 표에서만 제거
+        activeInstances.Clear();
     }
 
+    // ===================== 월드용 =====================
     public T Get<T>(T original, Vector3 position, Quaternion rotation, Transform parent) where T : Object
     {
-        if (original is GameObject)
-        {
-            GameObject prefab = original as GameObject;
-            string key = prefab.name;
+        GameObject go = Acquire(original, false);
+        if (go == null) return null;
 
-            if (!poolDic.ContainsKey(key))
-                CreatePool(key, prefab);
-
-            GameObject obj = poolDic[key].Get();
-            obj.transform.parent = parent;
-            obj.transform.position = position;
-            obj.transform.rotation = rotation;
-            return obj as T;
-        }
-        else if (original is Component)
-        {
-            Component component = original as Component;
-            string key = component.gameObject.name;
-
-            if (!poolDic.ContainsKey(key))
-                CreatePool(key, component.gameObject);
-
-            GameObject obj = poolDic[key].Get();
-            obj.transform.parent = parent;
-            obj.transform.position = position;
-            obj.transform.rotation = rotation;
-            return obj.GetComponent<T>();
-        }
-        else
-        {
-            return null;
-        }
+        go.transform.SetParent(parent);
+        go.transform.SetPositionAndRotation(position, rotation);
+        return ConvertTo<T>(go);
     }
 
     public T Get<T>(T original, Vector3 position, Quaternion rotation) where T : Object
@@ -79,212 +84,121 @@ public class PoolManager : ManagerBase
         return Get<T>(original, Vector3.zero, Quaternion.identity, null);
     }
 
-    public bool Release<T>(T instance) where T : Object
-    {
-        if (instance is GameObject)
-        {
-            GameObject go = instance as GameObject;
-            string key = go.name;
-
-            if (!poolDic.ContainsKey(key))
-                return false;
-
-            poolDic[key].Release(go);
-            return true;
-        }
-        else if (instance is Component)
-        {
-            Component component = instance as Component;
-            string key = component.gameObject.name;
-
-            if (!poolDic.ContainsKey(key))
-                return false;
-
-            poolDic[key].Release(component.gameObject);
-            return true;
-        }
-        else
-        {
-            return false;
-        }
-    }
-
-    public bool IsContain<T>(T original) where T : Object
-    {
-        if (original is GameObject)
-        {
-            GameObject prefab = original as GameObject;
-            string key = prefab.name;
-
-            if (poolDic.ContainsKey(key))
-                return true;
-            else
-                return false;
-
-        }
-        else if (original is Component)
-        {
-            Component component = original as Component;
-            string key = component.gameObject.name;
-
-            if (poolDic.ContainsKey(key))
-                return true;
-            else
-                return false;
-        }
-        else
-        {
-            return false;
-        }
-    }
-
-    private void CreatePool(string key, GameObject prefab)
-    {
-        GameObject root = new GameObject();
-        root.gameObject.name = $"{key}Container";
-        root.transform.parent = poolRoot;
-        poolContainer.Add(key, root.transform);
-
-        ObjectPool<GameObject> pool = new ObjectPool<GameObject>(
-            createFunc: () =>
-            {
-                GameObject obj = Instantiate(prefab);
-                obj.gameObject.name = key;
-                return obj;
-            },
-            actionOnGet: (GameObject obj) =>
-            {
-                obj.gameObject.SetActive(true);
-                obj.transform.parent = null;
-            },
-            actionOnRelease: (GameObject obj) =>
-            {
-                obj.gameObject.SetActive(false);
-                obj.transform.parent = poolContainer[key];
-            },
-            actionOnDestroy: (GameObject obj) =>
-            {
-                Destroy(obj);
-            }
-            );
-        poolDic.Add(key, pool);
-    }
-
+    // ===================== UI용 =====================
     public T GetUI<T>(T original, Vector3 position) where T : Object
     {
-        if (original is GameObject)
-        {
-            GameObject prefab = original as GameObject;
-            string key = prefab.name;
+        GameObject go = Acquire(original, true);
+        if (go == null) return null;
 
-            if (!poolDic.ContainsKey(key))
-                CreateUIPool(key, prefab);
-
-            GameObject obj = poolDic[key].Get();
-            obj.transform.position = position;
-            return obj as T;
-        }
-        else if (original is Component)
-        {
-            Component component = original as Component;
-            string key = component.gameObject.name;
-
-            if (!poolDic.ContainsKey(key))
-                CreateUIPool(key, component.gameObject);
-
-            GameObject obj = poolDic[key].Get();
-            obj.transform.position = position;
-            return obj.GetComponent<T>();
-        }
-        else
-        {
-            return null;
-        }
+        go.transform.position = position;
+        return ConvertTo<T>(go);
     }
 
     public T GetUI<T>(T original) where T : Object
     {
-        if (original is GameObject)
+        GameObject go = Acquire(original, true);
+        if (go == null) return null;
+
+        return ConvertTo<T>(go);
+    }
+
+    // ===================== 반납 =====================
+    public bool Release<T>(T instance) where T : Object
+    {
+        GameObject go = ToGameObject(instance);
+        if (go == null) return false;
+
+        int id = go.GetInstanceID();
+        if (!instancePools.TryGetValue(id, out PoolEntry entry))
+            return false;
+
+        if (!activeInstances.Contains(id))
         {
-            GameObject prefab = original as GameObject;
-            string key = prefab.name;
-
-            if (!poolDic.ContainsKey(key))
-                CreateUIPool(key, prefab);
-
-            GameObject obj = poolDic[key].Get();
-            return obj as T;
+            Debug.LogWarning($"[PoolManager] 이미 반납된 인스턴스입니다: {go.name}");
+            return false;
         }
-        else if (original is Component)
-        {
-            Component component = original as Component;
-            string key = component.gameObject.name;
 
-            if (!poolDic.ContainsKey(key))
-                CreateUIPool(key, component.gameObject);
-
-            GameObject obj = poolDic[key].Get();
-            return obj.GetComponent<T>();
-        }
-        else
-        {
-            return null;
-        }
+        entry.Pool.Release(go);
+        return true;
     }
 
     public bool ReleaseUI<T>(T instance) where T : Object
     {
-        if (instance is GameObject)
-        {
-            GameObject go = instance as GameObject;
-            string key = go.name;
-
-            if (!poolDic.ContainsKey(key))
-                return false;
-
-            poolDic[key].Release(go);
-            return true;
-        }
-        else if (instance is Component)
-        {
-            Component component = instance as Component;
-            string key = component.gameObject.name;
-
-            if (!poolDic.ContainsKey(key))
-                return false;
-
-            poolDic[key].Release(component.gameObject);
-            return true;
-        }
-        else
-        {
-            return false;
-        }
+        return Release(instance);
     }
 
-    private void CreateUIPool(string key, GameObject prefab)
+    public bool IsContain<T>(T instance) where T : Object
     {
-        ObjectPool<GameObject> pool = new ObjectPool<GameObject>(
+        GameObject go = ToGameObject(instance);
+        if (go == null) return false;
+        return instancePools.ContainsKey(go.GetInstanceID());
+    }
+
+    // ===================== 내부 =====================
+    private static GameObject ToGameObject(Object obj)
+    {
+        if (obj is GameObject go) return go;
+        if (obj is Component component) return component.gameObject;
+        return null;
+    }
+
+    private static T ConvertTo<T>(GameObject go) where T : Object
+    {
+        T asT = go as T;
+        if (asT != null) return asT;
+        if (typeof(Component).IsAssignableFrom(typeof(T))) return go.GetComponent<T>();
+        return null;
+    }
+
+    private GameObject Acquire(Object original, bool isUI)
+    {
+        GameObject prefab = ToGameObject(original);
+        if (prefab == null) return null;
+
+        if (!prefabPools.TryGetValue(prefab.GetInstanceID(), out PoolEntry entry))
+            entry = CreateEntry(prefab, isUI);
+
+        return entry.Pool.Get();
+    }
+
+    private PoolEntry CreateEntry(GameObject prefab, bool isUI)
+    {
+        EnsurePoolRoot();
+
+        var container = new GameObject($"{prefab.name}Container").transform;
+        container.SetParent(poolRoot, false);
+
+        var entry = new PoolEntry { Prefab = prefab, Container = container, IsUI = isUI };
+        entry.Pool = new ObjectPool<GameObject>(
             createFunc: () =>
             {
-                GameObject obj = Instantiate(prefab);
-                obj.gameObject.name = key;
+                GameObject obj = Object.Instantiate(prefab);
+                instancePools[obj.GetInstanceID()] = entry;
                 return obj;
             },
             actionOnGet: (GameObject obj) =>
             {
-                obj.gameObject.SetActive(true);
+                obj.SetActive(true);
+                activeInstances.Add(obj.GetInstanceID());
             },
             actionOnRelease: (GameObject obj) =>
             {
-                obj.gameObject.SetActive(false);
-                obj.transform.SetParent(canvasRoot.transform, false);
+                activeInstances.Remove(obj.GetInstanceID());
+                obj.SetActive(false);
+                if (entry.IsUI && uiRoot != null)
+                    obj.transform.SetParent(uiRoot, false);
+                else
+                    obj.transform.SetParent(entry.Container, false);
             },
             actionOnDestroy: (GameObject obj) =>
             {
-                Destroy(obj);
-            }
-            );
-        poolDic.Add(key, pool);
+                int id = obj.GetInstanceID();
+                instancePools.Remove(id);
+                activeInstances.Remove(id);
+                Object.Destroy(obj);
+            });
+
+        prefabPools.Add(prefab.GetInstanceID(), entry);
+        return entry;
     }
 }
