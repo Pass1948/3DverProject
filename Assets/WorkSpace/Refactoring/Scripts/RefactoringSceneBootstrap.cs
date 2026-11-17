@@ -44,6 +44,7 @@ public class RefactoringSceneOpener : MonoBehaviour
                 GameManager.Sound.SetSceneBGM(RefactoringPaths.Game1Scene, "Game1/UnwelcomeSchool", 1f);
             }
             GameManager.UI.ShowWindowUI<MainMenuUI>(RefactoringPaths.MainMenuUI);
+            new GameObject("AddressablesTestPanel").AddComponent<AddressablesTestPanel>();
         }
         else if (ScenePath == RefactoringPaths.Game1Scene || ScenePath == RefactoringPaths.Game2Scene)
             GameManager.UI.ShowWindowUI<BackToMenuUI>(RefactoringPaths.BackToMenuUI);
